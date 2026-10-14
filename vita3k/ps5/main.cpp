@@ -215,8 +215,9 @@ constexpr const char *ASYNC_SETTING = "Shader compilation";
 const std::vector<float> ANALOG_CHOICES = { 1.0f, 1.1f, 1.25f, 1.4f, 1.6f, 2.0f };
 const std::vector<int> VOLUME_CHOICES = { 0, 25, 50, 75, 100 };
 const std::vector<std::string> LOG_CHOICES = { "trace", "debug", "info", "warning", "error" };
-const std::vector<std::string> MAPPING_CHOICES = { "double-buffer", "page-table", "external-host", "disabled" };
-const std::vector<std::string> MAPPING_LABELS = { "double buffer", "page table", "external host", "off" };
+// The current PS5 port has only validated double-buffer memory mapping.
+const std::vector<std::string> MAPPING_CHOICES = { "double-buffer" };
+const std::vector<std::string> MAPPING_LABELS = { "double buffer" };
 
 // The choice nearest what the configuration already holds, so an unusual value does not jump when it is shown
 template <typename T>
@@ -258,9 +259,8 @@ std::vector<ps5::frontend::Setting> read_settings(EmuEnvState &emuenv) {
         LOG_CHOICES, std::clamp(emuenv.cfg.log_level, 0, static_cast<int>(LOG_CHOICES.size()) - 1) });
 
     settings.push_back({ ACCURACY_SETTING,
-        "Accurate drawing gives up two shortcuts the renderer otherwise takes with render targets. Try it on a game "
-        "whose picture breaks up into blocks or stripes; it costs frames, so leave it off when the picture is fine.",
-        { "fast", "accurate" }, emuenv.cfg.high_accuracy ? 1 : 0 });
+        "Accurate rendering currently produces a blank screen on this PS5 port. The stable fast path is enabled.",
+        { "fast" }, 0 });
 
     settings.push_back({ SURFACE_SYNC_SETTING,
         "Whether what the graphics chip draws is copied back into the game's own memory. A game that reads its "
@@ -269,9 +269,7 @@ std::vector<ps5::frontend::Setting> read_settings(EmuEnvState &emuenv) {
 
     const auto mapping = std::find(MAPPING_CHOICES.begin(), MAPPING_CHOICES.end(), emuenv.cfg.memory_mapping);
     settings.push_back({ MAPPING_SETTING,
-        "How a game's own memory reaches the graphics chip. Turning it off is the slowest and the surest; the other "
-        "three differ in how they keep the two copies in step, and a game that draws stale or missing geometry is "
-        "worth trying on each.",
+        "This PS5 build uses double-buffer mapping, the only mode validated for stability on this port.",
         MAPPING_LABELS, mapping == MAPPING_CHOICES.end() ? 0 : static_cast<int>(mapping - MAPPING_CHOICES.begin()) });
 
     settings.push_back({ ASYNC_SETTING,
@@ -295,7 +293,7 @@ void write_setting(EmuEnvState &emuenv, const Root &root_paths, const ps5::front
         emuenv.cfg.log_level = static_cast<spdlog::level::level_enum>(setting.choice);
         logging::set_level(static_cast<spdlog::level::level_enum>(setting.choice));
     } else if (setting.name == ACCURACY_SETTING) {
-        emuenv.cfg.high_accuracy = setting.choice == 1;
+        emuenv.cfg.high_accuracy = false;
     } else if (setting.name == SURFACE_SYNC_SETTING) {
         emuenv.cfg.disable_surface_sync = setting.choice == 0;
     } else if (setting.name == MAPPING_SETTING) {

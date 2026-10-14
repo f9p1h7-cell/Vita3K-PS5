@@ -44,6 +44,10 @@ std::vector<ps5_shm> chunks;
 } // namespace
 
 uint8_t *reserve(size_t bytes) {
+    if (bytes == 0 || bytes % CHUNK_SIZE != 0) {
+        LOG_CRITICAL("Guest memory reservation size {} is not a positive multiple of 64 KiB", bytes);
+        return nullptr;
+    }
     void *base = nullptr;
     const int result = ps5_vrange_reserve(bytes, RESERVE_HINT, CHUNK_SIZE, &base);
     if (result != 0) {
@@ -70,6 +74,13 @@ void release(uint8_t *base, size_t bytes) {
 
 bool commit(uint8_t *base, size_t offset, size_t bytes) {
     const std::lock_guard<std::mutex> lock(chunks_mutex);
+    const size_t capacity = chunks.size() * CHUNK_SIZE;
+    if (base == nullptr || offset > capacity || bytes > capacity - offset) {
+        LOG_CRITICAL("Guest memory commit is out of range: offset=0x{:X}, bytes=0x{:X}, capacity=0x{:X}", offset, bytes, capacity);
+        return false;
+    }
+    if (bytes == 0)
+        return true;
     const size_t first_chunk = align_down(offset, CHUNK_SIZE) / CHUNK_SIZE;
     const size_t end_chunk = align(offset + bytes, CHUNK_SIZE) / CHUNK_SIZE;
     for (size_t i = first_chunk; i < end_chunk; i++) {

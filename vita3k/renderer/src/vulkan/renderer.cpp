@@ -699,7 +699,12 @@ bool VKState::create(std::unique_ptr<renderer::State> &state, const Config &conf
         support_android_buffer_import &= SDL_GetAndroidSDKVersion() >= 26;
         support_unix_fd_import &= SDL_GetAndroidSDKVersion() >= 26;
 #endif
-
+#ifdef __PROSPERO__
+        if (!support_memory_mapping) {
+            LOG_ERROR("PS5 requires Vulkan buffer-device-address and uniform-buffer-standard-layout support for safe double-buffer mapping; refusing to start");
+            return false;
+        }
+#endif
         // Find which memory mapping methods are supported by the GPU
         supported_mapping_methods_mask = (1 << static_cast<int>(MappingMethod::Disabled));
         if (support_memory_mapping) {
@@ -931,6 +936,13 @@ void VKState::late_init(const Config &cfg, const std::string_view game_id, MemSt
     this->mem = &mem;
 
     bool use_high_accuracy = cfg.current_config.high_accuracy;
+#ifdef __PROSPERO__
+    // The current RADV shader-interlock path on PS5 can leave the frame blank.
+    // Ignore stale config values so this build always takes the working path.
+    if (use_high_accuracy)
+        LOG_WARN("Accurate rendering is disabled on PS5 until shader interlock is fixed");
+    use_high_accuracy = false;
+#endif
 
     // shader interlock is more accurate but slower
     if (features.support_shader_interlock && use_high_accuracy) {
@@ -959,6 +971,11 @@ void VKState::late_init(const Config &cfg, const std::string_view game_id, MemSt
 #ifdef __ANDROID__
     else if (config_mapping == "native-buffer")
         request_mapping = MappingMethod::NativeBuffer;
+#endif
+#ifdef __PROSPERO__
+    // Double-buffer is the only memory-mapping mode documented as stable on this port.
+    // In particular, the disabled path is known to crash.
+    request_mapping = MappingMethod::DoubleBuffer;
 #endif
     const std::string_view mapping_string[] = { "Disabled", "Double buffer", "External Host", "Page Table", "Native Buffer" };
 
